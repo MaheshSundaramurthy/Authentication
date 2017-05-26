@@ -2,6 +2,7 @@
 
 namespace Ds\Bundle\UserBundle\Action;
 
+use Symfony\Component\DependencyInjection\ContainerAwareInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 use FOS\UserBundle\Model\UserManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
@@ -10,6 +11,12 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 
 use Symfony\Component\Routing\Annotation\Route;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Method;
+
+use GuzzleHttp\Psr7;
+use GuzzleHttp\Client as HttpClient;
+use GuzzleHttp\Exception\RequestException;
+
+use Ds\Component\Container\Attribute;
 
 /**
  * Class RegistrationAction
@@ -58,20 +65,78 @@ class RegistrationAction
             return new JsonResponse([ 'error' => 'Username is already taken.' ], Response::HTTP_BAD_REQUEST);
         }
 
-        // @todo Create Individual identity on the Identities microservice
+        $individualUuid = $this->createIndividual();
 
-        $user = $this->userManager->createUser();
-        $user
-            ->setUsername($username)
-            ->setEmail($username)
-            ->setPlainPassword($password)
-            ->setRoles([ 'ROLE_INDIVIDUAL'])
-            ->setIdentity('Individual')
-            ->setIdentityUuid('fb848938-add9-4c5e-8922-1a841a73d344')
-            ->setEnabled(true);
+        if ($individualUuid) {
+            $user = $this->userManager->createUser();
+            $user
+                ->setUsername($username)
+                ->setEmail($username)
+                ->setPlainPassword($password)
+                ->setRoles(['ROLE_INDIVIDUAL'])
+                ->setIdentity('Individual')
+                ->setIdentityUuid($individualUuid)
+                ->setEnabled(true);
 
-        $this->userManager->updateUser($user);
+            $this->userManager->updateUser($user);
+            return new JsonResponse([ 'uuid' => $user->getUuid() ], Response::HTTP_CREATED);
+        }
+        else {
+            return new JsonResponse([ 'error' => 'Unable to create an Individual identity' ], Response::HTTP_BAD_REQUEST);
+        }
+    }
 
-        return new JsonResponse([ 'uuid' => $user->getUuid() ], Response::HTTP_CREATED);
+    /**
+     * Create a new Individual identity and attach it to a new IndividualPersona.
+     *
+     * @return bool|string Upon success return the UUID of the newly created individual; otherwise, return FALSE.
+     */
+    protected function createIndividual() {
+        // @todo For the Microservice URI to work in Docker, the Identities MS must be added as a `link` in docker-compose.yml
+        $client = new HttpClient();
+        $microservice_uri = 'http://localhost:8054/app_dev.php';
+
+        // Generates a JWT token for the `identities` system user
+         $identitiesUser = $this->userManager->findUserByUsername('identities');
+         $identitiesUserToken = $this->tokenManager->create($identitiesUser);
+
+        try {
+            $headers = [
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+                'Authorization' => 'Bearer ' . $identitiesUserToken
+                // @note Enabling `client`-based token verification in the Identities MS will cause it to return a `Invalid JWT token` error
+            ];
+
+            $individualCreationResponse = $client->request('POST', $microservice_uri . '/individuals', [
+                'body' => \GuzzleHttp\json_encode([
+                  'owner' => 'BusinessUnit',
+                  'ownerUuid' => '8bca60bb-11ac-420a-bf7b-23c698ab9244',
+                  'title' => ['en' => 'Registered Individual from the Authentication MS']
+                ]),
+                'headers'  => $headers,
+            ]);
+
+            $individualJson = \GuzzleHttp\json_decode($individualCreationResponse->getBody()->getContents());
+
+            if ($individualJson) {
+                $individualPresonaCreationResponse = $client->request('POST', $microservice_uri . '/individual-personas', [
+                    'body' => \GuzzleHttp\json_encode([
+                        'owner' => 'BusinessUnit',
+                        'ownerUuid' => '8bca60bb-11ac-420a-bf7b-23c698ab9244',
+                        'title' => ['en' => 'Default individual persona'],
+                        'individual' => '/individuals/' . $individualJson->uuid
+                    ]),
+                    'headers'  => $headers,
+                ]);
+
+                return $individualJson->uuid;
+            }
+
+        } catch (\Exception $e) {
+            // if (($e instanceof RequestException) && $e->hasResponse()) {}
+        }
+
+        return false;
     }
 }
