@@ -143,7 +143,7 @@ class RegistrationAction
         ];
 
         try {
-            $response = $client->request('POST', $this->configService->get('ds_user.services.identities.url').'/app_dev.php/individual-personas', [
+            $response = $client->request('POST', $this->configService->get('ds_user.services.identities.url').'/individual-personas', [
                 'headers' => $headers,
                 'json' => $json
             ]);

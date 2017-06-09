@@ -6,16 +6,24 @@ default:
       contexts:
         - FeatureContext: { doctrine: "@doctrine" }
         - Behat\MinkExtension\Context\MinkContext
-        - Sanpi\Behatch\Context\RestContext
-        - Sanpi\Behatch\Context\JsonContext
+        - Behatch\Context\RestContext
+        - Behatch\Context\JsonContext
+        - Imbo\BehatApiExtension\Context\ApiContext
   extensions:
     Behat\Symfony2Extension:
       kernel:
         env: "test"
         debug: "true"
+    Imbo\BehatApiExtension:
+      base_uri: "http://localhost:8010/"
     Behat\MinkExtension:
-      base_url: "http://example.com/"
+      base_url: "http://localhost:8010/"
       sessions:
         default:
           symfony2: ~
-    Sanpi\Behatch\Extension: ~
+    Behatch\Extension: ~
+
+#phantomjs:
+#    extensions:
+#        Behat\MinkExtension:
+#            browser_name: phantomjs
