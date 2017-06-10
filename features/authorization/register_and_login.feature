@@ -16,6 +16,7 @@ Feature: Registration and Login
       }
     """
 
+
   Scenario: An anonymous user accesses the registration API with existing credentials
     Given the following form parameters are set:
       | name | value |
@@ -25,19 +26,14 @@ Feature: Registration and Login
     Then the response is "client error"
 
 
-  Scenario: A registered user can login and obtain a JWT token
+  Scenario: A registered user can login and obtain a JWT token that contains her username
     Given the following form parameters are set:
       | name | value |
       | username | user@ds |
       | password | user |
     When I request "app_dev.php/login_check" using HTTP "POST"
     Then the response is success
-    Then the response body contains:
-    """
-      {
-        "token": "<re>/^[a-zA-Z0-9]{20}/</re>"
-      }
-    """
+    And the response body contains JWT token named "token" with "username" property as "user@ds"
 
 
   Scenario: A user attempts to sign in using invalid credentials
